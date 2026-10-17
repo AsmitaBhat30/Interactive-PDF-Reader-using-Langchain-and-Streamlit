@@ -3,7 +3,9 @@
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+#from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+#from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
@@ -22,12 +24,23 @@ def process_file(doc):
     
     pdfsearch = Chroma.from_documents(doc, embeddings)
 
-    chain = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0.3), 
+    chain = ConversationalRetrievalChain.from_llm(ChatOllama(model="qwen2.5:7b", temperature=0.3), 
         retriever=pdfsearch.as_retriever(search_kwargs={"k": 2}),
         return_source_documents=True)
     return chain
 
+# Method for handling user input
+def handle_userinput(query):
 
+    response = st.session_state.conversation({"question": query, 'chat_history':st.session_state.chat_history}, return_only_outputs=True)
+    st.session_state.chat_history += [(query, response['answer'])]
+
+    st.session_state.N = list(response['source_documents'][0])[1][1]['page']
+    
+    
+    for i, message in enumerate(st.session_state.chat_history): 
+         st.session_state.expander1.write(user_template.replace("{{MSG}}", message[0]), unsafe_allow_html=True)
+         st.session_state.expander1.write(bot_template.replace("{{MSG}}", message[1]), unsafe_allow_html=True)
 
 def main():
 
@@ -66,6 +79,28 @@ def main():
                     pdf = loader.load()
                     st.session_state.conversation = process_file(pdf)
                     st.session_state.col1.markdown("Done processing. You may now ask a question.")      
+
+    if user_question:
+        handle_userinput(user_question)
+        with NamedTemporaryFile(suffix="pdf") as temp:
+            temp.write(st.session_state.pdf_doc.getvalue())
+            temp.seek(0)
+            reader = PdfReader(temp.name)
+            
+            pdf_writer = PdfWriter()
+            start = max(st.session_state.N-2, 0)
+            end = min(st.session_state.N+2, len(reader.pages)-1) 
+            while start <= end:
+                pdf_writer.add_page(reader.pages[start])
+                start+=1
+            with NamedTemporaryFile(suffix="pdf") as temp2:
+                pdf_writer.write(temp2.name)
+                with open(temp2.name, "rb") as f:
+                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+
+                    pdf_display = F'<iframe src="data:application/pdf;base64,{base64_pdf}#page={3} width="100%" height="900" type="application/pdf frameborder="0"></iframe>'
+                
+                    st.session_state.col2.markdown(pdf_display, unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
