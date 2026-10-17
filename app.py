@@ -13,9 +13,24 @@ import base64
 from htmlTemplates import css, bot_template, user_template, expander_css
 
 
+# Process the Input PDF
+def process_file(doc):
+    model_name = "thenlper/gte-small"
+    model_kwargs = {'device': 'cpu'}
+    encode_kwargs = {'normalize_embeddings': False}
+    embeddings = HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)  
+    
+    pdfsearch = Chroma.from_documents(doc, embeddings)
+
+    chain = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0.3), 
+        retriever=pdfsearch.as_retriever(search_kwargs={"k": 2}),
+        return_source_documents=True)
+    return chain
+
+
 
 def main():
-    
+
     load_dotenv()
     
     st.set_page_config(page_title="Interactive Reader",   # browser tab title
@@ -35,16 +50,7 @@ def main():
     st.session_state.col1.header("Interactive Reader :books:")
     user_question = st.session_state.col1.text_input("Ask a question on the contents of the uploaded PDF:")
     st.session_state.expander1 = st.session_state.col1.expander('Your Chat', expanded=True)
-    st.session_state.col1.markdown(expander_css, unsafe_allow_html=True) 
-    # Task 5: Load and Process the PDF 
-    
-
-    
-    # Task 7: Handle Query and Display Pages
-    
-       
-
-
+    st.session_state.col1.markdown(expander_css, unsafe_allow_html=True)        
 
 if __name__ == '__main__':
     main()
