@@ -32,10 +32,10 @@ def process_file(doc):
 # Method for handling user input
 def handle_userinput(query):
 
-    response = st.session_state.conversation({"question": query, 'chat_history':st.session_state.chat_history}, return_only_outputs=True)
+    response = st.session_state.conversation.invoke({"question": query, 'chat_history':st.session_state.chat_history})
     st.session_state.chat_history += [(query, response['answer'])]
 
-    st.session_state.N = list(response['source_documents'][0])[1][1]['page']
+    st.session_state.N = response['source_documents'][0].metadata['page']
     
     
     for i, message in enumerate(st.session_state.chat_history): 
@@ -80,7 +80,7 @@ def main():
                     st.session_state.conversation = process_file(pdf)
                     st.session_state.col1.markdown("Done processing. You may now ask a question.")      
 
-    if user_question:
+    if user_question and st.session_state.conversation is not None:
         handle_userinput(user_question)
         with NamedTemporaryFile(suffix="pdf") as temp:
             temp.write(st.session_state.pdf_doc.getvalue())
@@ -89,6 +89,7 @@ def main():
             
             pdf_writer = PdfWriter()
             start = max(st.session_state.N-2, 0)
+            first_page = start
             end = min(st.session_state.N+2, len(reader.pages)-1) 
             while start <= end:
                 pdf_writer.add_page(reader.pages[start])
@@ -98,7 +99,7 @@ def main():
                 with open(temp2.name, "rb") as f:
                     base64_pdf = base64.b64encode(f.read()).decode('utf-8')
 
-                    pdf_display = F'<iframe src="data:application/pdf;base64,{base64_pdf}#page={3} width="100%" height="900" type="application/pdf frameborder="0"></iframe>'
+                    pdf_display = F'<iframe src="data:application/pdf;base64,{base64_pdf}#page={st.session_state.N - first_page + 1}" width="100%" height="900" type="application/pdf" frameborder="0"></iframe>'
                 
                     st.session_state.col2.markdown(pdf_display, unsafe_allow_html=True)
 
